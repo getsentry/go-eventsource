@@ -1,20 +1,16 @@
 package eventsource
 
 import (
-	"bytes"
 	"container/list"
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
 
 type eventMessage struct {
-	id    string
-	event string
-	data  string
+	data []byte
 }
 
 type retryMessage struct {
@@ -79,7 +75,7 @@ type EventSource interface {
 	http.Handler
 
 	// send message to all consumers
-	SendEventMessage(data, event, id string)
+	SendEventMessage(data []byte)
 
 	// send retry message to all consumers
 	SendRetryMessage(duration time.Duration)
@@ -97,21 +93,13 @@ type message interface {
 }
 
 func (m *eventMessage) prepareMessage() []byte {
-	var data bytes.Buffer
-	if len(m.id) > 0 {
-		data.WriteString(fmt.Sprintf("id: %s\n", strings.Replace(m.id, "\n", "", -1)))
-	}
-	if len(m.event) > 0 {
-		data.WriteString(fmt.Sprintf("event: %s\n", strings.Replace(m.event, "\n", "", -1)))
-	}
-	if len(m.data) > 0 {
-		lines := strings.Split(m.data, "\n")
-		for _, line := range lines {
-			data.WriteString(fmt.Sprintf("data: %s\n", line))
-		}
-	}
-	data.WriteString("\n")
-	return data.Bytes()
+	return append(
+		[]byte("data: "),
+		append(
+			m.data,
+			[]byte("\n\n")...,
+		)...,
+	)
 }
 
 func controlProcess(es *eventSource) {
@@ -227,8 +215,8 @@ func (es *eventSource) sendMessage(m message) {
 	es.sink <- m
 }
 
-func (es *eventSource) SendEventMessage(data, event, id string) {
-	em := &eventMessage{id, event, data}
+func (es *eventSource) SendEventMessage(data []byte) {
+	em := &eventMessage{data}
 	es.sendMessage(em)
 }
 
